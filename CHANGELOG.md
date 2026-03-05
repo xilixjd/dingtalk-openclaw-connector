@@ -6,6 +6,20 @@
 This document records all significant changes. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-03-05
+
+### 修复 / Fixes
+- 🐛 修复 stream 模式 model 参数错误导致 session 路由失败的问题  
+  Fixed issue where incorrect model parameter in stream mode caused session routing failures
+- 🐛 将 Gateway 请求中的 model 参数从 `'default'` 更正为 `'main'`，确保正确的 Agent 路由  
+  Corrected model parameter in Gateway requests from `'default'` to `'main'` to ensure proper Agent routing
+
+### 改进 / Improvements
+- 优化异步模式处理流程，改进错误处理和日志输出  
+  Optimized async mode processing flow, improved error handling and log output
+- 增强 DM Policy 检查机制，支持白名单配置  
+  Enhanced DM Policy check mechanism, supporting allowlist configuration
+
 ## [0.7.0] - 2026-03-05
 
 ### 新增功能 / Added Features
@@ -54,6 +68,10 @@ and version numbers follow [Semantic Versioning](https://semver.org/).
 - ✅ 提供多 Agent 配置说明和示例，支持通过 `accounts` 和 `bindings` 配置多个机器人  
   Provides multi-Agent configuration documentation and examples, supports configuring multiple bots via `accounts` and `bindings`
 
+### 修复 / Fixes
+- 🐛 修复机器人发送语音消息播放异常问题，音频进度和播放功能现已正常工作  
+  Fixed bot voice message playback issues, audio progress and playback functionality now work correctly
+
 ### 改进 / Improvements
 - 优化媒体文件下载和存储机制  
   Optimized media file download and storage mechanism
@@ -73,8 +91,6 @@ and version numbers follow [Semantic Versioning](https://semver.org/).
 ### 已知问题 / Known Issues
 - ⚠️ 钉钉文档读取功能 (`docs.read`) 当前不可用，因为 MCP 中未提供相应的 tool。代码层面实现正常，等待 MCP 支持。  
   DingTalk document reading functionality (`docs.read`) is currently unavailable because MCP does not provide the corresponding tool. Implementation is correct at the code level, waiting for MCP support.
-- ⚠️ 机器人发送的语音消息在钉钉客户端播放异常：音频进度显示为 0:00，且无法播放音频内容。修复中。  
-  Voice messages sent by the bot play abnormally in DingTalk client: audio progress shows 0:00 and audio content cannot be played. Under fix.
 
 ### 文档更新 / Documentation Updates
 - 更新 README.md，添加新功能使用说明  

@@ -52,6 +52,11 @@ This update brings rich media and document processing capabilities, enabling AI 
 - ✅ **向后兼容** - 单 Agent 场景下功能完全兼容，无需额外配置  
   **Backward Compatible** - Fully compatible with single Agent scenarios, no additional configuration required
 
+## 🐛 修复 / Fixes
+
+- **语音消息播放异常修复** - 修复机器人发送语音消息播放异常问题，音频进度和播放功能现已正常工作  
+  **Voice Message Playback Fix** - Fixed bot voice message playback issues, audio progress and playback functionality now work correctly
+
 ## 🔧 改进 / Improvements
 
 - **媒体文件处理优化** - 优化了媒体文件下载和存储机制，提升处理效率  
@@ -88,20 +93,6 @@ Wait for MCP to provide corresponding tool support, or use other document operat
 
 **状态 / Status**：已记录，等待上游支持  
 Recorded, waiting for upstream support
-
-### 2. 语音消息播放异常 / Voice Message Playback Issue
-
-**问题描述 / Issue Description**：机器人发送的语音消息在钉钉客户端播放异常  
-Voice messages sent by the bot play abnormally in DingTalk client
-
-**表现 / Symptoms**：音频进度显示为 0:00，且无法播放音频内容  
-Audio progress shows 0:00 and audio content cannot be played
-
-**影响范围 / Impact**：影响所有通过机器人发送的语音消息播放功能  
-Affects all voice message playback functionality sent through the bot
-
-**状态 / Status**：修复中  
-Under fix
 
 ## 📚 文档更新 / Documentation Updates
 
