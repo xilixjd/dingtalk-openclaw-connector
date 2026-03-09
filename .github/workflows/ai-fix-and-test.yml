@@ -19,8 +19,7 @@ on:
           - github
 
 env:
-  DINGTALK_WEBHOOK: https://oapi.dingtalk.com/robot/send?access_token=8710dbbfa8b8b63a02ddfe41ae428b838d2f5e998e0ec446196981d97e7d5350
-  DINGTALK_KEYWORD: dingtalk-openclaw-connector
+  DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -459,13 +458,12 @@ jobs:
               testResultsText = `- 📝 代码检查: ${lintStatus === '0' ? '✅ 通过' : '❌ 失败'}\n- 🔍 类型检查: ${typecheckStatus === '0' ? '✅ 通过' : '❌ 失败'}\n- 🧪 单元测试: ${testResult === 'passed' ? '✅ 通过' : '❌ 失败'}`;
             }
             
-            // 构建钉钉消息
-            const keyword = process.env.DINGTALK_KEYWORD;
+            // 构建钉钉消息（确保包含小写关键字以支持 Custom Keywords 模式）
             const message = {
               msgtype: 'markdown',
               markdown: {
-                title: `${keyword} - ${statusEmoji} AI 修复测试完成`,
-                text: `## ${statusEmoji} AI 修复测试${statusText}\n\n${keyword}\n\n**Issue:** [#${issueNumber} ${issueTitle}](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${issueNumber})\n\n**修复分支:** \`${branchName}\`\n\n**测试结果:**\n${testResultsText}\n\n**下一步:**\n${allPassed ? '✅ 所有测试通过，请审核 PR 后合并' : (lintStatus === '' ? '⏳ 本地 AI 修复完成后，请手动运行测试' : '⚠️ 部分测试未通过，请查看详细日志')}\n\n---\n⏰ ${new Date().toLocaleString('zh-CN')}`
+                title: `${statusEmoji} AI 修复测试完成`,
+                text: `## ${statusEmoji} AI 修复测试${statusText}\n\n**Issue:** [#${issueNumber} ${issueTitle}](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${issueNumber})\n\n**修复分支:** \`${branchName}\`\n\n**测试结果:**\n${testResultsText}\n\n**下一步:**\n${allPassed ? '✅ 所有测试通过，请审核 PR 后合并' : (lintStatus === '' ? '⏳ 本地 AI 修复完成后，请手动运行测试' : '⚠️ 部分测试未通过，请查看详细日志')}\n\n---\n⏰ ${new Date().toLocaleString('zh-CN')}\n\n**关键词**: issue, pr, ai-fix`
               }
             };
             

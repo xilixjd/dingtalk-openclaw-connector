@@ -27,7 +27,7 @@ jobs:
               \"msgtype\": \"markdown\",
               \"markdown\": {
                 \"title\": \"PR审核提醒\",
-                \"text\": \"## 👀 新的 PR 需要审核\\n\\n**#${PR_NUMBER}**: ${PR_TITLE}\\n\\n**作者**: @${PR_AUTHOR}\\n\\n[点击审核](${PR_URL})\\n\\n---\\n📦 ${{ github.repository }}\"
+                \"text\": \"## 👀 新的 PR 需要审核\\n\\n**#${PR_NUMBER}**: ${PR_TITLE}\\n\\n**作者**: @${PR_AUTHOR}\\n\\n[点击审核](${PR_URL})\\n\\n---\\n📦 ${{ github.repository }}\\n\\n**关键词**: pr\"
               }
             }"
         env:
@@ -63,7 +63,7 @@ jobs:
               \"msgtype\": \"markdown\",
               \"markdown\": {
                 \"title\": \"PR审核完成\",
-                \"text\": \"## ${EMOJI} PR 审核${STATUS}\\n\\n**#${PR_NUMBER}**: ${PR_TITLE}\\n\\n**审核人**: @${REVIEWER}\\n\\n**状态**: ${REVIEW_STATE}\\n\\n[查看详情](${PR_URL})\\n\\n---\\n📦 ${{ github.repository }}\"
+                \"text\": \"## ${EMOJI} PR 审核${STATUS}\\n\\n**#${PR_NUMBER}**: ${PR_TITLE}\\n\\n**审核人**: @${REVIEWER}\\n\\n**状态**: ${REVIEW_STATE}\\n\\n[查看详情](${PR_URL})\\n\\n---\\n📦 ${{ github.repository }}\\n\\n**关键词**: pr\"
               }
             }"
         env:
@@ -101,7 +101,7 @@ jobs:
               \"msgtype\": \"markdown\",
               \"markdown\": {
                 \"title\": \"PR可合并\",
-                \"text\": \"## 🎉 PR 已审核通过，可以合并\\n\\n**#${PR_NUMBER}**: ${PR_TITLE}\\n\\n**审核状态**: ✅ 已通过\\n\\n**操作**: 点击合并到 main\\n\\n[立即合并](${PR_URL})\\n\\n---\\n📦 ${{ github.repository }}\"
+                \"text\": \"## 🎉 PR 已审核通过，可以合并\\n\\n**#${PR_NUMBER}**: ${PR_TITLE}\\n\\n**审核状态**: ✅ 已通过\\n\\n**操作**: 点击合并到 main\\n\\n[立即合并](${PR_URL})\\n\\n---\\n📦 ${{ github.repository }}\\n\\n**关键词**: pr\"
               }
             }"
         env:
