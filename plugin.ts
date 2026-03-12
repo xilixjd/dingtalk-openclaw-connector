@@ -1377,6 +1377,8 @@ interface GatewayOptions {
   memoryUser?: string;
   /** 本地图片文件路径列表，用于 OpenClaw AgentMediaPayload */
   imageLocalPaths?: string[];
+  /** 自定义 Gateway URL（如通过 Nginx 代理），用于 TLS 等场景 */
+  gatewayBaseUrl?: string;
   /** 会话类型：'direct'（单聊）或 'group'（群聊），用于 bindings 匹配 */
   peerKind?: 'direct' | 'group';
   /** 发送者 ID，用于 bindings 匹配 */
@@ -1386,6 +1388,12 @@ interface GatewayOptions {
 }
 
 async function* streamFromGateway(options: GatewayOptions, accountId: string): AsyncGenerator<string, void, unknown> {
+  const { userContent, systemPrompts, sessionKey, gatewayAuth, imageLocalPaths, gatewayBaseUrl, log } = options;
+  const rt = getRuntime();
+  // 支持自定义 Gateway URL（如通过 Nginx 代理），用于 TLS 等场景
+  const gatewayUrl = gatewayBaseUrl
+    ? `${gatewayBaseUrl}/v1/chat/completions`
+    : `http://127.0.0.1:${rt.gateway?.port || 18789}/v1/chat/completions`;
   const { userContent, systemPrompts, sessionKey, gatewayAuth, memoryUser, imageLocalPaths, peerKind, peerId, gatewayPort, log } = options;
   const rt = getRuntime();
   const port = gatewayPort || rt.gateway?.port || 18789;
@@ -2709,6 +2717,7 @@ async function handleDingTalkMessage(params: {
         systemPrompts,
         sessionKey: sessionContextJson,
         gatewayAuth,
+        gatewayBaseUrl: dingtalkConfig.gatewayBaseUrl,
         memoryUser,
         imageLocalPaths: imageLocalPaths.length > 0 ? imageLocalPaths : undefined,
         peerKind,
@@ -2786,6 +2795,7 @@ async function handleDingTalkMessage(params: {
         systemPrompts,
         sessionKey: sessionContextJson,
         gatewayAuth,
+        gatewayBaseUrl: dingtalkConfig.gatewayBaseUrl,
         memoryUser,
         imageLocalPaths: imageLocalPaths.length > 0 ? imageLocalPaths : undefined,
         peerKind,
@@ -2870,6 +2880,7 @@ async function handleDingTalkMessage(params: {
         systemPrompts,
         sessionKey: sessionContextJson,
         gatewayAuth,
+        gatewayBaseUrl: dingtalkConfig.gatewayBaseUrl,
         memoryUser,
         imageLocalPaths: imageLocalPaths.length > 0 ? imageLocalPaths : undefined,
         peerKind,
@@ -3253,6 +3264,7 @@ const dingtalkPlugin = {
         groupPolicy: { type: 'string', enum: ['open', 'allowlist'], default: 'open' },
         gatewayToken: { type: 'string', default: '', description: 'Gateway auth token (Bearer)' },
         gatewayPassword: { type: 'string', default: '', description: 'Gateway auth password (alternative to token)' },
+        gatewayBaseUrl: { type: 'string', default: '', description: 'Custom Gateway URL (e.g., http://127.0.0.1:18788 for Nginx proxy to TLS Gateway)' },
         sessionTimeout: { type: 'number', default: 1800000, description: 'Session timeout in ms (default 30min)' },
         separateSessionByConversation: { type: 'boolean', default: true, description: '是否按单聊/群聊/群区分 session' },
         sharedMemoryAcrossConversations: { type: 'boolean', default: false, description: '单 agent 场景下是否共享记忆；false 时不同群聊、群聊与私聊记忆隔离' },
@@ -3282,7 +3294,10 @@ const dingtalkPlugin = {
       const config = getConfig(cfg);
       const id = accountId || DEFAULT_ACCOUNT_ID;
       if (config.accounts?.[id]) {
-        return { accountId: id, config: config.accounts[id], enabled: config.accounts[id].enabled !== false };
+        // 合并 channel 级别配置（如 gatewayBaseUrl）到 account 配置
+        const { accounts, ...channelConfig } = config;
+        const mergedConfig = { ...channelConfig, ...config.accounts[id] };
+        return { accountId: id, config: mergedConfig, enabled: config.accounts[id].enabled !== false };
       }
       // 没有 accounts 配置或找不到指定账号时，使用顶层配置
       return { accountId: DEFAULT_ACCOUNT_ID, config, enabled: config.enabled !== false };
