@@ -6,6 +6,26 @@
 This document records all significant changes. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.7] - 2026-03-13
+
+### 新增 / Added
+- ✨ **自定义 Gateway URL 支持** - 新增 `gatewayBaseUrl` 配置项，支持通过自定义 URL（如 Nginx 反向代理到 TLS/HTTPS Gateway）访问 Gateway  
+  **Custom Gateway URL support** - Added `gatewayBaseUrl` option to allow using a custom URL (e.g., Nginx reverse proxy to a TLS/HTTPS Gateway)
+- ✨ **钉钉「思考中」表情反馈** - 在处理用户消息期间为原消息贴上「🤔思考中」表情，处理结束后自动撤回，清晰展示处理进度  
+  **DingTalk “thinking” emotion feedback** - Attaches a “🤔 Thinking” emotion to the original user message while processing and automatically recalls it after completion to clearly indicate progress
+- ✨ **测试基础设施完善** - 引入 Vitest 及多种测试脚本（run/watch/coverage/ui/integration），为后续自动化测试和回归验证提供基础  
+  **Improved testing infrastructure** - Introduced Vitest and multiple test scripts (run/watch/coverage/ui/integration) to enable better automated and regression testing
+- ✨ **Issue Webhook 工作流** - 新增 GitHub Actions 工作流，将 Issue 变更以统一 JSON 格式推送到配置的 Webhook  
+  **Issue webhook workflow** - Added a GitHub Actions workflow to push Issue changes as unified JSON payloads to a configured webhook
+
+### 修复 / Fixes
+- 🐛 **媒体元数据与缩略图提取更健壮** - ffprobe 或缩略图生成失败时不再中断主流程，而是返回默认元数据或空缩略图  
+  **More robust media metadata & thumbnail extraction** - ffprobe or thumbnail generation failures no longer abort the main flow but return default metadata or a null thumbnail instead
+- 🐛 **音频时长提取兼容性改进** - 使用动态 `import('child_process')` 替代 `require('child_process')`，提升在不同运行环境下的兼容性  
+  **Audio duration extraction compatibility** - Replaced `require('child_process')` with dynamic `import('child_process')` to improve compatibility across environments
+- 🐛 **主动消息用户列表校验** - 为主动消息的 `userIds` 列表增加空值过滤，避免因无效用户 ID 导致请求失败  
+  **Proactive message user list validation** - Added empty value filtering for the `userIds` list in proactive messages to prevent request failures caused by invalid IDs
+
 ## [0.7.6] - 2026-03-12
 
 ### 修复 / Fixes
