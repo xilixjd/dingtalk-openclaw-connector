@@ -513,14 +513,14 @@ async function handleDingTalkMessage(params: HandleMessageParams): Promise<void>
       log?.info?.(`[DingTalk][File] 开始文件后处理`);
       accumulated = await processFileMarkers(accumulated, '', config, oapiToken, log, true, target);
 
-      const finalContent = accumulated.trim();
-      if (finalContent.length === 0) {
+      const finalCardContent = accumulated.trim();
+      if (finalCardContent.length === 0) {
         log?.info?.(`[DingTalk][AICard] 内容为空（纯媒体消息），使用默认提示`);
         await finishAICard(card, '✅ 媒体已发送', log);
       } else {
-        await finishAICard(card, finalContent, log);
+        await finishAICard(card, finalCardContent, log);
       }
-      log?.info?.(`[DingTalk] 流式响应完成，共 ${finalContent.length} 字符`);
+      log?.info?.(`[DingTalk] 流式响应完成，共 ${finalCardContent.length} 字符`);
 
     } catch (err: any) {
       log?.error?.(`[DingTalk] Gateway 调用失败: ${err.message}`);

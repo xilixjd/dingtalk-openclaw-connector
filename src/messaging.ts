@@ -4,9 +4,9 @@
  */
 
 import axios from 'axios';
-import type { DingtalkConfig } from './types.js';
-import { DINGTALK_API, getAccessToken, getOapiAccessToken } from './utils.js';
-import { processLocalImages, processVideoMarkers, processAudioMarkers, processFileMarkers } from './media.js';
+import type { DingtalkConfig } from './types.ts';
+import { DINGTALK_API, getAccessToken, getOapiAccessToken } from './utils.ts';
+import { processLocalImages, processVideoMarkers, processAudioMarkers, processFileMarkers } from './media.ts';
 
 // ============ 常量 ============
 
