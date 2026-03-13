@@ -4,25 +4,28 @@ import type {
   ReplyPayload,
 } from "openclaw/plugin-sdk";
 import {
-  createReplyPrefixContext,
+  createReplyPrefixOptions,
   createTypingCallbacks,
   logTypingFailure,
 } from "openclaw/plugin-sdk";
 import { resolveDingtalkAccount } from "./accounts.js";
 import { getDingtalkRuntime } from "./runtime.js";
+import type { DingtalkConfig } from "./types.js";
 import {
   createAICardForTarget,
   streamAICard,
   finishAICard,
+  sendMessage,
   type AICardTarget,
+  type AICardInstance,
 } from "./messaging.js";
 import {
   processLocalImages,
   processVideoMarkers,
   processAudioMarkers,
   processFileMarkers,
-  uploadMediaToDingTalk,
 } from "./media.js";
+import { getAccessToken, getOapiAccessToken } from "./utils.js";
 
 export type CreateDingtalkReplyDispatcherParams = {
   cfg: ClawdbotConfig;
@@ -33,6 +36,7 @@ export type CreateDingtalkReplyDispatcherParams = {
   isDirect: boolean;
   accountId?: string;
   messageCreateTimeMs?: number;
+  sessionWebhook: string;
 };
 
 export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatcherParams) {
@@ -44,10 +48,16 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     senderId,
     isDirect,
     accountId,
+    sessionWebhook,
   } = params;
 
   const account = resolveDingtalkAccount({ cfg, accountId });
-  const prefixContext = createReplyPrefixContext({ cfg, agentId });
+  const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
+    cfg,
+    agentId,
+    channel: "dingtalk-connector",
+    accountId,
+  });
 
   // AI Card 状态管理
   let currentCardTarget: AICardTarget | null = null;
@@ -95,13 +105,15 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     }
 
     try {
-      currentCardTarget = await createAICardForTarget({
-        cfg,
-        conversationId,
-        senderId,
-        isDirect,
-        accountId: account.accountId,
-      });
+      const target: AICardTarget = isDirect
+        ? { type: 'user', userId: senderId }
+        : { type: 'group', openConversationId: conversationId };
+      
+      currentCardTarget = await createAICardForTarget(
+        account.config as DingtalkConfig,
+        target,
+        params.runtime.log
+      );
       accumulatedText = "";
     } catch (error) {
       params.runtime.error?.(
@@ -120,41 +132,52 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
       // 处理媒体标记
       let finalText = accumulatedText;
       
-      // 处理本地图片
-      const { text: textAfterImages, localPaths: imagePaths } = 
-        await processLocalImages(finalText);
-      finalText = textAfterImages;
-
-      // 上传图片到钉钉
-      if (imagePaths.length > 0) {
-        for (const localPath of imagePaths) {
-          try {
-            const mediaId = await uploadMediaToDingTalk({
-              cfg,
-              localPath,
-              accountId: account.accountId,
-            });
-            // 将 mediaId 添加到文本中（钉钉 AI Card 支持）
-            finalText += `\n[image:${mediaId}]`;
-          } catch (err) {
-            params.runtime.error?.(
-              `dingtalk[${account.accountId}]: upload image failed: ${String(err)}`
-            );
-          }
-        }
+      // 获取 oapiToken 用于媒体处理
+      const oapiToken = await getOapiAccessToken(account.config as DingtalkConfig);
+      
+      if (oapiToken) {
+        // 处理本地图片
+        finalText = await processLocalImages(finalText, oapiToken, params.runtime.log);
+        
+        // 处理视频、音频、文件标记
+        const target: AICardTarget = isDirect
+          ? { type: 'user', userId: senderId }
+          : { type: 'group', openConversationId: conversationId };
+        
+        finalText = await processVideoMarkers(
+          finalText,
+          '',
+          account.config as DingtalkConfig,
+          oapiToken,
+          params.runtime.log,
+          false,
+          target
+        );
+        finalText = await processAudioMarkers(
+          finalText,
+          '',
+          account.config as DingtalkConfig,
+          oapiToken,
+          params.runtime.log,
+          false,
+          target
+        );
+        finalText = await processFileMarkers(
+          finalText,
+          '',
+          account.config as DingtalkConfig,
+          oapiToken,
+          params.runtime.log,
+          false,
+          target
+        );
       }
 
-      // 处理视频、音频、文件标记
-      finalText = await processVideoMarkers(finalText);
-      finalText = await processAudioMarkers(finalText);
-      finalText = await processFileMarkers(finalText);
-
-      await finishAICard({
-        cfg,
-        target: currentCardTarget,
-        text: finalText,
-        accountId: account.accountId,
-      });
+      await finishAICard(
+        currentCardTarget as AICardInstance,
+        finalText,
+        params.runtime.log
+      );
     } catch (error) {
       params.runtime.error?.(
         `dingtalk[${account.accountId}]: streaming close failed: ${String(error)}`
@@ -167,8 +190,7 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
 
   const { dispatcher, replyOptions, markDispatchIdle } =
     core.channel.reply.createReplyDispatcherWithTyping({
-      responsePrefix: prefixContext.responsePrefix,
-      responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
+      ...prefixOptions,
       humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, agentId),
       onReplyStart: () => {
         deliveredFinalTexts.clear();
@@ -195,12 +217,12 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
           }
           if (currentCardTarget) {
             accumulatedText += text;
-            await streamAICard({
-              cfg,
-              target: currentCardTarget,
-              text: accumulatedText,
-              accountId: account.accountId,
-            });
+            await streamAICard(
+              currentCardTarget as AICardInstance,
+              accumulatedText,
+              false,
+              params.runtime.log
+            );
           }
           return;
         }
@@ -212,12 +234,33 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
           return;
         }
 
-        // 非流式模式：直接发送消息
-        // TODO: 实现非流式消息发送
-        // 这里需要调用钉钉的普通消息发送 API
-        params.runtime.log?.(
-          `dingtalk[${account.accountId}]: non-streaming delivery not yet implemented`
-        );
+        // 非流式模式：使用普通消息发送
+        if (info?.kind === "final" && !streamingEnabled) {
+          try {
+            // 分块发送（如果文本过长）
+            for (const chunk of core.channel.text.chunkTextWithMode(
+              text,
+              textChunkLimit,
+              chunkMode
+            )) {
+              await sendMessage(
+                account.config as DingtalkConfig,
+                sessionWebhook,
+                chunk,
+                {
+                  useMarkdown: true,
+                  log: params.runtime.log,
+                }
+              );
+            }
+            deliveredFinalTexts.add(text);
+          } catch (error) {
+            params.runtime.error?.(
+              `dingtalk[${account.accountId}]: non-streaming delivery failed: ${String(error)}`
+            );
+          }
+          return;
+        }
       },
       onError: async (error, info) => {
         params.runtime.error?.(
@@ -239,7 +282,7 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     dispatcher,
     replyOptions: {
       ...replyOptions,
-      onModelSelected: prefixContext.onModelSelected,
+      onModelSelected,
       onPartialReply: streamingEnabled
         ? (payload: ReplyPayload) => {
             if (!payload.text) {
@@ -247,12 +290,12 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
             }
             if (currentCardTarget) {
               accumulatedText = payload.text;
-              void streamAICard({
-                cfg,
-                target: currentCardTarget,
-                text: accumulatedText,
-                accountId: account.accountId,
-              });
+              void streamAICard(
+                currentCardTarget as AICardInstance,
+                accumulatedText,
+                false,
+                params.runtime.log
+              );
             }
           }
         : undefined,

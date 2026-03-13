@@ -7,7 +7,9 @@
 
 import type { PluginApi } from "openclaw/plugin-sdk";
 import { dingtalkPlugin } from "./src/channel.ts";
+import { setDingtalkRuntime } from "./src/runtime.ts";
 
 export default function register(api: PluginApi) {
+  setDingtalkRuntime(api.runtime);
   api.registerChannel({ plugin: dingtalkPlugin });
 }
