@@ -536,7 +536,7 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
     
     // 如果没有匹配到，使用默认 agent
     if (!matchedAgentId) {
-      matchedAgentId = cfg.defaultAgent || 'ding-bot1';
+      matchedAgentId = cfg.defaultAgent || 'main';
       console.log(`[DingTalk][${accountId}] ⚠️ 未匹配到 binding，使用默认 agent: ${matchedAgentId}`);
     }
     
