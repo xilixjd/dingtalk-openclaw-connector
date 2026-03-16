@@ -3570,9 +3570,10 @@ const dingtalkPlugin = {
       ctx.log?.info(`[${account.accountId}] 启动钉钉 Stream 客户端...`);
       ctx.log?.info(`[${account.accountId}] 配置信息：clientId=${config.clientId}, endpoint=${config.endpoint || '默认'}`);
 
-      // 配置 DWClient：启用 SDK 的自动重连，简化重连逻辑
-      // - autoReconnect: true（启用 SDK 的自动重连，像飞书一样简单可靠）
-      // - keepAlive: false（关闭 SDK 的激进心跳检测，使用应用层心跳）
+      // 配置 DWClient：关闭 SDK 内置的 keepAlive 和 autoReconnect，使用应用层自定义心跳和重连
+      // - autoReconnect: false（关闭 SDK 的自动重连，避免与应用层重连冲突）
+      // - keepAlive: false（关闭 SDK 的激进心跳检测，避免 8 秒超时强制终止连接）
+      // - endpoint: 可选，自定义钉钉 API 网关地址，默认使用 SDK 内置的 https://api.dingtalk.com/v1.0/gateway/connections/open
       const client = new DWClient({
         clientId: config.clientId,
         clientSecret: config.clientSecret,
@@ -3582,6 +3583,8 @@ const dingtalkPlugin = {
         // ← 可选：自定义 endpoint，如使用内网代理或测试环境。如果不配置或配置错误，使用 SDK 默认值
         ...(config.endpoint ? { endpoint: config.endpoint } : {}),
       } as any);
+
+      ctx.log?.info(`[${account.accountId}] DWClient 初始化完成，endpoint=${client.getConfig()?.endpoint || '默认'}`);
 
       client.registerCallbackListener(TOPIC_ROBOT, async (res: any) => {
         const messageId = res.headers?.messageId;
