@@ -21,8 +21,6 @@ export interface SocketManagerConfig {
   heartbeatInterval: number;
   /** 超时阈值（毫秒） */
   timeoutThreshold: number;
-  /** 最大重连次数 */
-  maxReconnectAttempts: number;
   /** 基础退避时间（毫秒） */
   baseBackoffDelay: number;
   /** 最大退避时间（毫秒） */
@@ -57,7 +55,6 @@ export function createSocketManager(
   const config: SocketManagerConfig = {
     heartbeatInterval: 10 * 1000,      // 10 秒心跳间隔
     timeoutThreshold: 90 * 1000,       // 90 秒超时阈值
-    maxReconnectAttempts: 5,           // 最大重连次数
     baseBackoffDelay: 1000,            // 基础退避 1 秒
     maxBackoffDelay: 30 * 1000,        // 最大退避 30 秒
   };
@@ -87,7 +84,7 @@ export function createSocketManager(
   }
   
   /**
-   * 统一重连函数，带指数退避
+   * 统一重连函数，带指数退避（无限重连）
    */
   async function doReconnect(immediate = false) {
     if (isReconnecting) {
@@ -95,18 +92,12 @@ export function createSocketManager(
       return;
     }
     
-    // 检查是否超过最大重连次数
-    if (!immediate && reconnectAttempts >= config.maxReconnectAttempts) {
-      log?.error?.(`[${accountId}] ❌ 达到最大重连次数 (${config.maxReconnectAttempts})，放弃重连`);
-      return;
-    }
-    
     isReconnecting = true;
     
-    // 如果不是立即重连，则应用指数退避
+    // 应用指数退避（非立即重连时）
     if (!immediate && reconnectAttempts > 0) {
       const delay = calculateBackoffDelay(reconnectAttempts);
-      log?.info?.(`[${accountId}] ⏳ 等待 ${Math.round(delay / 1000)} 秒后重连 (尝试 ${reconnectAttempts + 1}/${config.maxReconnectAttempts})`);
+      log?.info?.(`[${accountId}] ⏳ 等待 ${Math.round(delay / 1000)} 秒后重连 (尝试 ${reconnectAttempts + 1})`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
     
@@ -132,7 +123,7 @@ export function createSocketManager(
       }
     } catch (err: any) {
       reconnectAttempts++;
-      log?.error?.(`[${accountId}] 重连失败：${err.message} (尝试 ${reconnectAttempts}/${config.maxReconnectAttempts})`);
+      log?.error?.(`[${accountId}] 重连失败：${err.message} (尝试 ${reconnectAttempts})`);
       throw err;
     } finally {
       isReconnecting = false;
