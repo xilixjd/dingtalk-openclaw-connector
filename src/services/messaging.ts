@@ -858,8 +858,8 @@ async function sendProactiveInternal(
 
   const {
     msgType = "text",
-    useAICard = false,
-    fallbackToNormal = false,
+    useAICard = true,          // 默认启用 AI Card，让主动发送消息优先使用卡片形式
+    fallbackToNormal = true,   // 默认降级，AI Card 失败时自动回退到普通消息
     log: externalLog,
   } = options;
 
