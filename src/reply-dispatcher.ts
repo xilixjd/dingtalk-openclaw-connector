@@ -1,10 +1,21 @@
+// openclaw 2026.3.23+ 将 plugin-sdk 拆分为子模块，旧版本仍从主入口导出。
+// 使用动态 import 兼容新旧两种版本：优先尝试新版子路径，失败则回退到旧版主入口。
 import type { ClawdbotConfig, RuntimeEnv } from "openclaw/plugin-sdk/runtime";
 import type { ReplyPayload } from "openclaw/plugin-sdk/reply-payload";
-import {
+
+type ChannelRuntimeModule = {
+  createReplyPrefixOptions: typeof import("openclaw/plugin-sdk/channel-runtime").createReplyPrefixOptions;
+  createTypingCallbacks: typeof import("openclaw/plugin-sdk/channel-runtime").createTypingCallbacks;
+  logTypingFailure: typeof import("openclaw/plugin-sdk/channel-runtime").logTypingFailure;
+};
+
+const {
   createReplyPrefixOptions,
   createTypingCallbacks,
   logTypingFailure,
-} from "openclaw/plugin-sdk/channel-runtime";
+}: ChannelRuntimeModule = await import("openclaw/plugin-sdk/channel-runtime").catch(
+  () => import("openclaw/plugin-sdk") as Promise<ChannelRuntimeModule>
+);
 import { resolveDingtalkAccount } from "./config/accounts.ts";
 import { getDingtalkRuntime } from "./runtime.ts";
 import type { DingtalkConfig } from "./types/index.ts";
