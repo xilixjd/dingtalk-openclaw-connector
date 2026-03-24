@@ -18,8 +18,6 @@
 import type { ClawdbotConfig, RuntimeEnv, HistoryEntry } from "openclaw/plugin-sdk";
 import type { ResolvedDingtalkAccount, DingtalkConfig } from "../types/index.ts";
 import { 
-  isMessageProcessed, 
-  markMessageProcessed, 
   buildSessionContext,
   getAccessToken,
   getOapiAccessToken,
@@ -41,6 +39,8 @@ import {
   AUDIO_MARKER_PATTERN
 } from "../services/media/index.ts";
 import { sendProactive, type AICardTarget } from "../services/messaging/index.ts";
+import { createAICardForTarget, streamAICard, type AICardInstance } from "../services/messaging/card.ts";
+import { QUEUE_BUSY_ACK_PHRASES } from "../utils/constants.ts";
 import { createDingtalkReplyDispatcher, normalizeSlashCommand } from "../reply-dispatcher.ts";
 import { getDingtalkRuntime } from "../runtime.ts";
 import { dingtalkHttp } from '../utils/http-client.ts';
@@ -417,8 +417,7 @@ export async function downloadFileToLocal(
     log?.info?.(`文件下载成功: ${fileName}, size=${buffer.length} bytes, path=${localPath}`);
     return localPath;
   } catch (err: any) {
-    console.error(`[ERROR] downloadFileToLocal 异常: ${err.message}`);
-    console.error(`[ERROR] 异常堆栈:\n${err.stack}`);
+    log?.error?.(`downloadFileToLocal 异常: ${err.message}\n${err.stack}`);
     return null;
   }
 }
@@ -532,15 +531,18 @@ interface HandleMessageParams {
   runtime?: RuntimeEnv;
   log?: any;
   cfg: ClawdbotConfig;
+  /** 队列繁忙时预先创建的 AI Card，处理时直接复用而非新建，实现"占位→更新"效果 */
+  preCreatedCard?: AICardInstance;
+  /** 队列繁忙时已在入队阶段提前贴上了思考中表情，内部处理时跳过重复贴表情 */
+  emotionAlreadyAdded?: boolean;
 }
 
 /**
  * 内部消息处理函数（实际执行消息处理逻辑）
  */
 export async function handleDingTalkMessageInternal(params: HandleMessageParams): Promise<void> {
-  const { accountId, config, data, sessionWebhook, runtime, log: inputLog, cfg } = params;
+  const { accountId, config, data, sessionWebhook, runtime, cfg } = params;
 
-  // 如果传入的 log 为空，则使用基于 config 的 logger
   const log = createLoggerFromConfig(config, `DingTalk:${accountId}`);
 
   const content = extractMessageContent(data);
@@ -695,8 +697,10 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     sharedMemoryAcrossConversations: config.sharedMemoryAcrossConversations,
   });
 
-  // ===== 解析 agentId 和工作空间路径（在 sessionContext 之后，确保 peerId 与会话隔离策略一致）=====
-  // 使用 sessionContext.peerId 进行匹配，与后续 sessionKey 构建保持一致，避免两次匹配结果不一致
+  // ===== 解析 agentId 和工作空间路径（在 sessionContext 之后，确保 chatType 与会话隔离策略一致）=====
+  // 使用 sessionContext.peerId 进行匹配（真实的 conversationId/senderId，与 match.peer.id 语义一致）。
+  // 注意：不能使用 sessionContext.sessionPeerId，它受 sharedMemoryAcrossConversations 等配置影响，
+  // 可能被设为 accountId，导致不同群/用户的消息匹配到同一个 binding，路由错误。
   let matchedAgentId: string | null = null;
   if (cfg.bindings && cfg.bindings.length > 0) {
     for (const binding of cfg.bindings) {
@@ -892,9 +896,12 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   if (!userContent && imageLocalPaths.length === 0) return;
 
   // ===== 贴处理中表情 =====
-  addEmotionReply(config, data, log).catch(err => {
-    log?.warn?.(`贴表情失败: ${err.message}`);
-  });
+  // 若队列繁忙时已在入队阶段提前贴过表情，此处跳过，避免重复贴
+  if (!params.emotionAlreadyAdded) {
+    addEmotionReply(config, data, log).catch(err => {
+      log?.warn?.(`贴表情失败: ${err.message}`);
+    });
+  }
 
   // ===== 异步模式：立即回执 + 后台执行 + 主动推送结果 =====
   const asyncMode = config.asyncMode === true;
@@ -946,18 +953,18 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     const matchedBy = matchedAgentId !== (cfg.defaultAgent || 'main') ? 'binding' : 'default';
     
     // ✅ 使用 SDK 标准方法构建 sessionKey，符合 OpenClaw 规范
-    // 格式：agent:{agentId}:{channel}:{peerKind}:{peerId}
-    // ✅ 修复：使用 sessionContext.peerId，确保会话隔离配置生效
+    // 格式：agent:{agentId}:{channel}:{peerKind}:{sessionPeerId}
+    // ✅ 使用 sessionContext.sessionPeerId 构建 sessionKey，确保会话隔离配置生效
     // ✅ 关键修复：传递 dmScope 参数，让 SDK 使用配置文件中的 session.dmScope 设置
     const dmScope = cfg.session?.dmScope || 'per-channel-peer';
-    log?.info?.(`🔍 构建 sessionKey 前的参数: agentId=${matchedAgentId}, channel=dingtalk-connector, accountId=${accountId}, chatType=${sessionContext.chatType}, peerId=${sessionContext.peerId}, dmScope=${dmScope}`);
+    log?.info?.(`🔍 构建 sessionKey 前的参数: agentId=${matchedAgentId}, channel=dingtalk-connector, accountId=${accountId}, chatType=${sessionContext.chatType}, sessionPeerId=${sessionContext.sessionPeerId}, dmScope=${dmScope}`);
     const sessionKey = core.channel.routing.buildAgentSessionKey({
       agentId: matchedAgentId,
       channel: 'dingtalk-connector',  // ✅ 使用 'dingtalk-connector' 而不是 'dingtalk'
       accountId: accountId,
       peer: {
-        kind: sessionContext.chatType,  // ✅ 使用 sessionContext.chatType
-        id: sessionContext.peerId,      // ✅ 使用 sessionContext.peerId（包含会话隔离逻辑）
+        kind: sessionContext.chatType,       // ✅ 使用 sessionContext.chatType
+        id: sessionContext.sessionPeerId,    // ✅ 使用 sessionContext.sessionPeerId（包含会话隔离逻辑）
       },
       dmScope: dmScope,  // ✅ 传递 dmScope 参数，确保生成完整格式的 sessionKey
     });
@@ -980,15 +987,15 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       SessionKey: sessionKey,  // ✅ 使用手动匹配的 sessionKey
       AccountId: accountId,
       ChatType: sessionContext.chatType,
-      GroupSubject: isDirect ? undefined : data.conversationId,
-      SenderName: senderId,
+      GroupSubject: isDirect ? undefined : data.conversationTitle,
+      SenderName: senderName,
       SenderId: senderId,
-      Provider: "dingtalk" as const,
-      Surface: "dingtalk" as const,
+      Provider: "dingtalk-connector" as const,
+      Surface: "dingtalk-connector" as const,
       MessageSid: data.msgId,
       Timestamp: Date.now(),
       CommandAuthorized: true,
-      OriginatingChannel: "dingtalk" as const,
+      OriginatingChannel: "dingtalk-connector" as const,
       OriginatingTo: toField,  // ✅ 修复：应该使用 toField，而不是 accountId
     });
 
@@ -1004,6 +1011,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       messageCreateTimeMs: Date.now(),
       sessionWebhook: data.sessionWebhook,
       asyncMode,
+      preCreatedCard: params.preCreatedCard,
     });
 
     // 使用 SDK 的 dispatchReplyFromConfig
@@ -1180,15 +1188,17 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
     sharedMemoryAcrossConversations: config.sharedMemoryAcrossConversations,
   });
 
-  const baseSessionId = queueSessionContext.peerId;
+  const baseSessionId = queueSessionContext.sessionPeerId;
 
   if (!baseSessionId) {
     log?.warn?.('无法构建会话标识，跳过队列管理');
     return handleDingTalkMessageInternal(params);
   }
 
-  // 解析 agentId：使用 sessionContext.peerId 和 sessionContext.chatType 进行匹配
-  // 与 handleDingTalkMessageInternal 中的匹配逻辑保持一致
+  // 解析 agentId：使用 queueSessionContext.peerId（真实 peer 标识）进行匹配
+  // 与 handleDingTalkMessageInternal 中的匹配逻辑保持一致。
+  // 必须使用 peerId 而非 sessionPeerId，原因：sharedMemoryAcrossConversations=true 时
+  // sessionPeerId 被设为 accountId，导致不同群的消息匹配到同一个 binding。
   let matchedAgentId: string | null = null;
   if (cfg.bindings && cfg.bindings.length > 0) {
     for (const binding of cfg.bindings) {
@@ -1218,14 +1228,46 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
     // 更新会话活跃时间
     sessionLastActivity.set(queueKey, Date.now());
 
+    // 检测队列是否繁忙（入队前检查，此时 previousTask 尚未被当前消息覆盖）
+    const isQueueBusy = sessionQueues.has(queueKey);
+
     // 获取该会话+agent的上一个处理任务
     const previousTask = sessionQueues.get(queueKey) || Promise.resolve();
+
+    // 队列繁忙时：立即创建一个 AI Card 显示排队 ACK 文案，并将 Card 实例传入处理任务
+    // 处理完成后 reply-dispatcher 会复用此 Card 更新为最终结果，用户看到的是同一条消息的内容变化
+    let preCreatedCard: AICardInstance | undefined;
+    if (isQueueBusy) {
+      const ackPhrases = QUEUE_BUSY_ACK_PHRASES;
+      const ackText = ackPhrases[Math.floor(Math.random() * ackPhrases.length)];
+      const cardTarget: AICardTarget = isDirect
+        ? { type: 'user', userId: senderId }
+        : { type: 'group', openConversationId: data.conversationId };
+
+      try {
+        const card = await createAICardForTarget(config, cardTarget, log);
+        if (card) {
+          // 用 streamAICard 把 ACK 文案写入 Card（INPUTING 状态，表示正在处理中）
+          await streamAICard(card, ackText, false, config, log);
+          preCreatedCard = card;
+          log?.info?.(`[队列] 队列繁忙，已创建排队 ACK Card，cardInstanceId=${card.cardInstanceId}`);
+        } else {
+          log?.warn?.(`[队列] 创建排队 ACK Card 失败（返回 null），跳过 ACK`);
+        }
+        // 在发送 ACK 的同时立即贴上思考中表情，让用户知道消息已被接收
+        addEmotionReply(config, data, log).catch(err => {
+          log?.warn?.(`[队列] 贴排队表情失败: ${err.message}`);
+        });
+      } catch (ackErr: any) {
+        log?.warn?.(`[队列] 创建排队 ACK Card 异常: ${ackErr?.message || ackErr}`);
+      }
+    }
 
     // 创建当前消息的处理任务
     const currentTask = previousTask
       .then(async () => {
         log?.info?.(`[队列] 开始处理消息，queueKey=${queueKey}`);
-        await handleDingTalkMessageInternal(params);
+        await handleDingTalkMessageInternal({ ...params, preCreatedCard, emotionAlreadyAdded: isQueueBusy });
         log?.info?.(`[队列] 消息处理完成，queueKey=${queueKey}`);
       })
       .catch((err: any) => {
@@ -1243,14 +1285,12 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
     // 更新队列
     sessionQueues.set(queueKey, currentTask);
 
-    // 等待当前任务完成
-    await currentTask;
-    console.log(`[DEBUG] 任务执行完成`);
+    // 不等待任务完成，立即返回，不阻塞 WebSocket 消息接收
+    // 消息处理在后台异步执行，队列保证同一会话+agent的消息串行处理
   } catch (err: any) {
-    console.error(`[DEBUG] 队列管理异常: ${err.message}`);
-    console.error(`[DEBUG] 队列管理异常堆栈: ${err.stack}`);
-    // 如果队列管理失败，直接调用内部处理函数
-    return handleDingTalkMessageInternal(params);
+    log?.error?.(`[队列] 队列管理异常，直接处理: ${err.message}`);
+    // 如果队列管理失败，直接调用内部处理函数（不阻塞）
+    void handleDingTalkMessageInternal(params);
   }
 }
 

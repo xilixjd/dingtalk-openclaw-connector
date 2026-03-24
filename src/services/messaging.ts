@@ -6,6 +6,7 @@
 import type { DingtalkConfig } from "../types/index.ts";
 import { DINGTALK_API, getAccessToken, getOapiAccessToken } from "../utils/index.ts";
 import { dingtalkHttp, dingtalkOapiHttp } from "../utils/http-client.ts";
+import { MEDIA_MSG_TYPES } from "../utils/constants.ts";
 import { createLoggerFromConfig } from "../utils/logger.ts";
 import {
   processLocalImages,
@@ -863,8 +864,11 @@ async function sendProactiveInternal(
     log: externalLog,
   } = options;
 
-  // 如果启用 AI Card
-  if (useAICard) {
+  // 图片、音频、视频、文件等媒体类型消息不支持 AI Card，必须走普通消息 API
+  const isMediaMessage = MEDIA_MSG_TYPES.has(msgType as any);
+
+  // 如果启用 AI Card（媒体消息强制跳过）
+  if (useAICard && !isMediaMessage) {
     try {
       const card = await createAICardForTarget(config, target, externalLog);
       if (card) {

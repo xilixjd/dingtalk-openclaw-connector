@@ -56,6 +56,8 @@ export type CreateDingtalkReplyDispatcherParams = {
   messageCreateTimeMs?: number;
   sessionWebhook: string;
   asyncMode?: boolean;
+  /** 队列繁忙时预先创建的 AI Card，startStreaming 时直接复用而非新建 */
+  preCreatedCard?: AICardInstance;
 };
 
 export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatcherParams) {
@@ -69,6 +71,7 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     accountId,
     sessionWebhook,
     asyncMode = false,
+    preCreatedCard,
   } = params;
 
   const account = resolveDingtalkAccount({ cfg, accountId });
@@ -114,7 +117,7 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
   
   // ✅ 节流控制：避免频繁调用钉钉 API 导致 QPS 限流
   let lastUpdateTime = 0;
-  const updateInterval = 1000; // 最小更新间隔 1000ms（钉钉 QPS 限制：40 次/秒，安全起见设为 1 秒）
+  const updateInterval = 500; // 最小更新间隔 500ms（钉钉 QPS 限制：40 次/秒，保守起见设为 0.5 秒）
 
   // ✅ 错误兜底：防止重复发送错误消息
   const deliveredErrorTypes = new Set<string>();
@@ -225,6 +228,15 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     }
     if (isCreatingCard) {
       log.info(`[DingTalk][startStreaming] AI Card 正在创建中，跳过`);
+      return;
+    }
+
+    // 若队列繁忙时已预先创建了 Card（显示排队 ACK 文案），直接复用，无需新建
+    // 这样用户看到的是同一条消息从 ACK 文案更新为最终结果，而不是多出一条消息
+    if (preCreatedCard) {
+      log.info(`[DingTalk][startStreaming] 复用预创建 AI Card，cardInstanceId=${preCreatedCard.cardInstanceId}`);
+      currentCardTarget = preCreatedCard;
+      accumulatedText = "";
       return;
     }
     
@@ -385,11 +397,12 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
     core.channel.reply.createReplyDispatcherWithTyping({
       ...prefixOptions,
       humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, agentId),
-      onReplyStart: async () => {
+      onReplyStart: () => {
         deliveredFinalTexts.clear();
         log.info(`[DingTalk][onReplyStart] 开始回复，流式 enabled=${streamingEnabled}`);
         if (streamingEnabled) {
-          await startStreaming();
+          // fire-and-forget：不阻塞 onReplyStart 返回，onPartialReply 会等待 Card 创建完成
+          void startStreaming();
         }
         typingCallbacks.onActive?.();
       },
@@ -666,7 +679,7 @@ export function createDingtalkReplyDispatcher(params: CreateDingtalkReplyDispatc
         }
       },
       }),
-      disableBlockStreaming: true,  // ✅ 强制使用 onPartialReply 而不是 block
+      disableBlockStreaming: true,  // block 内容合并到 final，流式更新通过 onPartialReply 实现
     },
     markDispatchIdle,
     getAsyncModeResponse: () => asyncModeFullResponse,

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] - 2026-03-24
+
+### 修复 / Fixes
+- 🐛 **兼容 OpenClaw Gateway 新版本** - 修复在 OpenClaw Gateway 2026.3.22+ 版本下安装插件时报错 `ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './plugin-sdk/compat' is not defined by "exports"` 的问题。根因是 `src/runtime.ts` 使用了已被新版 SDK 移除的 `openclaw/plugin-sdk/compat` 子路径，现已改为从 `openclaw/plugin-sdk` 主入口导入，对所有版本（2026.3.1+）均兼容  
+  **Compatible with newer OpenClaw Gateway versions** - Fixed `ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './plugin-sdk/compat' is not defined by "exports"` when installing under OpenClaw Gateway 2026.3.22+. Root cause: `src/runtime.ts` imported from the removed `openclaw/plugin-sdk/compat` sub-path; now imports from the `openclaw/plugin-sdk` main entry, compatible with all versions (2026.3.1+)
+
+- ✅ **AI 卡片流式更新延迟优化** - 改动前 `onReplyStart` 串行等待 AI Card 创建（约 500ms~1s），期间 partial reply 全部丢弃，节流间隔 1000ms 也过于保守。改动后 AI Card 创建改为 fire-and-forget 与 AI 生成并行，节流间隔调整为 500ms，流式内容能更早更频繁地呈现  
+  **AI card progressive update latency improvement** - Previously `onReplyStart` awaited AI Card creation serially (~500ms–1s), discarding all partial replies during that window, with a 1000ms throttle too conservative for short replies. AI Card creation now runs fire-and-forget in parallel with AI generation; throttle reduced to 500ms for earlier and more frequent streaming updates
+
+- 🐛 **多 Agent 路由与 sharedMemoryAcrossConversations 冲突** - 修复配置 `sharedMemoryAcrossConversations: true` 时，多群分配不同 Agent 的 bindings 全部路由到同一 Agent 的问题。路由匹配现在使用专用的 `peerId`（真实 peer 标识，不受会话隔离配置影响），session 构建使用 `sessionPeerId`，两者职责严格分离  
+  **Multi-Agent routing conflict with sharedMemoryAcrossConversations** - Fixed all bindings resolving to the same Agent when `sharedMemoryAcrossConversations: true`. Routing now uses dedicated `peerId` (real peer identifier, unaffected by session isolation config); session construction uses `sessionPeerId` with strict separation of responsibilities
+
+- 🐛 **发送图片失败** - 修复发送图片时出现异常的问题 ([#316](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector/issues/316))  
+  **Image sending failure** - Fixed an issue where sending images would fail with an error ([#316](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector/issues/316))
+
+- 🐛 **发送人昵称与群名称未正确传递给 AI** - 修复会话上下文中 `SenderName` 字段错误传入用户 ID（而非昵称）、`GroupSubject` 字段错误传入群 ID（而非群名称）的问题，AI 现在能正确获取发送人的钉钉昵称和所在群的名称  
+  **Sender nickname and group name not passed to AI** - Fixed `SenderName` being set to user ID instead of display name, and `GroupSubject` being set to group ID instead of group title; AI now correctly receives the sender's nickname and group name
+
+### 改进 / Improvements
+- ✨ **消息队列繁忙时的即时排队反馈** - 当用户快速连续发送消息、上一条仍在处理中时，新消息现在会立即弹出一条 AI Card 气泡显示排队提示文案，同时贴上"思考中"表情。等轮到该消息处理时，气泡**原地更新**为最终回复内容，不会额外多发一条消息  
+  **Instant queue acknowledgement when busy** - When a user sends messages in quick succession while the previous one is still processing, the new message now immediately shows an AI Card bubble with a queuing acknowledgement and a "thinking" emoji. When it's the message's turn, the same bubble is **updated in place** with the final reply — no extra message is sent
+
 ## [0.8.2] - 2026-03-22
 
 ### 修复 / Fixes

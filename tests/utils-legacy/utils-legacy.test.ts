@@ -130,7 +130,8 @@ describe("utils-legacy", () => {
       conversationId: "c1",
       groupSessionScope: "group_sender",
     });
-    expect(grouped.peerId).toBe("c1:u1");
+    expect(grouped.peerId).toBe("c1");
+    expect(grouped.sessionPeerId).toBe("c1:u1");
 
     const shared = buildSessionContext({
       accountId: "a",
@@ -139,6 +140,7 @@ describe("utils-legacy", () => {
       conversationId: "c1",
       separateSessionByConversation: false,
     });
-    expect(shared.peerId).toBe("u1");
+    expect(shared.peerId).toBe("c1");
+    expect(shared.sessionPeerId).toBe("u1");
   });
 });

@@ -134,6 +134,7 @@ describe('session management helpers', () => {
         conversationId: '',
       });
       expect(ctx.peerId).toBe('u-1');
+      expect(ctx.sessionPeerId).toBe('u-1');
     });
   });
 
