@@ -57,6 +57,16 @@ import { QUEUE_BUSY_ACK_PHRASES } from "../utils/constants.ts";
 import { createDingtalkReplyDispatcher } from "../reply-dispatcher.ts";
 import { normalizeSlashCommand } from "../utils/session.ts";
 import { getDingtalkRuntime } from "../runtime.ts";
+import {
+  buildDynamicAgentInboundBody,
+  ensureDynamicAgentListed,
+  ensureDynamicAgentRuntimeDirs,
+  ensureDynamicWorkspaceSeeded,
+  generateAgentId,
+  getDynamicAgentConfig,
+  shouldUseDynamicAgent,
+  type DynamicAgentChatType,
+} from "../dynamic-agent.ts";
 import { dingtalkHttp } from '../utils/http-client.ts';
 import { createLoggerFromConfig } from '../utils/index.ts';
 import * as fs from 'fs';
@@ -125,6 +135,75 @@ export type MonitorDingtalkAccountOpts = {
 
 // ============ Agent 路由解析 ============
 // SDK 会自动处理 bindings 解析，无需手动实现
+
+function toDynamicAgentChatType(chatType: "direct" | "group"): DynamicAgentChatType {
+  return chatType === "group" ? "group" : "dm";
+}
+
+function resolveAgentIdByBindings(params: {
+  cfg: ClawdbotConfig;
+  accountId: string;
+  chatType: "direct" | "group";
+  peerId: string;
+}): string {
+  const { cfg, accountId, chatType, peerId } = params;
+  let matchedAgentId: string | null = null;
+
+  if (cfg.bindings && cfg.bindings.length > 0) {
+    for (const binding of cfg.bindings) {
+      const match = binding?.match ?? {};
+      if (match.channel && match.channel !== "dingtalk-connector") continue;
+      if (match.accountId && match.accountId !== accountId) continue;
+      if (match.peer) {
+        if (match.peer.kind && match.peer.kind !== chatType) continue;
+        if (match.peer.id && match.peer.id !== '*' && match.peer.id !== peerId) continue;
+      }
+      matchedAgentId = binding.agentId;
+      break;
+    }
+  }
+
+  return matchedAgentId || cfg.defaultAgent || "main";
+}
+
+function resolveEffectiveAgentRoute(params: {
+  cfg: ClawdbotConfig;
+  accountId: string;
+  chatType: "direct" | "group";
+  peerId: string;
+  senderId: string;
+}): {
+  sourceAgentId: string;
+  targetAgentId: string;
+  useDynamicAgent: boolean;
+  dynamicConfig: ReturnType<typeof getDynamicAgentConfig>;
+} {
+  const { cfg, accountId, chatType, peerId, senderId } = params;
+  const sourceAgentId = resolveAgentIdByBindings({ cfg, accountId, chatType, peerId });
+  const dynamicConfig = getDynamicAgentConfig(cfg);
+  const dynamicChatType = toDynamicAgentChatType(chatType);
+  const useDynamicAgent = shouldUseDynamicAgent({
+    chatType: dynamicChatType,
+    senderId,
+    config: cfg,
+  });
+
+  if (!useDynamicAgent) {
+    return {
+      sourceAgentId,
+      targetAgentId: sourceAgentId,
+      useDynamicAgent: false,
+      dynamicConfig,
+    };
+  }
+
+  return {
+    sourceAgentId,
+    targetAgentId: generateAgentId(dynamicChatType, peerId, accountId),
+    useDynamicAgent: true,
+    dynamicConfig,
+  };
+}
 
 // ============ 消息内容提取 ============
 
@@ -1095,26 +1174,28 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     sharedMemoryAcrossConversations: config.sharedMemoryAcrossConversations,
   });
 
-  // ===== 解析 agentId 和工作空间路径（在 sessionContext 之后，确保 chatType 与会话隔离策略一致）=====
-  // 使用 sessionContext.peerId 进行匹配（真实的 conversationId/senderId，与 match.peer.id 语义一致）。
-  // 注意：不能使用 sessionContext.sessionPeerId，它受 sharedMemoryAcrossConversations 等配置影响，
-  // 可能被设为 accountId，导致不同群/用户的消息匹配到同一个 binding，路由错误。
-  let matchedAgentId: string | null = null;
-  if (cfg.bindings && cfg.bindings.length > 0) {
-    for (const binding of cfg.bindings) {
-      const match = binding.match;
-      if (match.channel && match.channel !== "dingtalk-connector") continue;
-      if (match.accountId && match.accountId !== accountId) continue;
-      if (match.peer) {
-        if (match.peer.kind && match.peer.kind !== sessionContext.chatType) continue;
-        if (match.peer.id && match.peer.id !== '*' && match.peer.id !== sessionContext.peerId) continue;
-      }
-      matchedAgentId = binding.agentId;
-      break;
+  // ===== 解析 agent 路由（bindings + dynamicAgents）=====
+  const route = resolveEffectiveAgentRoute({
+    cfg,
+    accountId,
+    chatType: sessionContext.chatType,
+    peerId: sessionContext.peerId,
+    senderId,
+  });
+  let matchedAgentId: string = route.targetAgentId;
+
+  if (route.useDynamicAgent) {
+    ensureDynamicAgentRuntimeDirs(route.targetAgentId);
+    if (route.dynamicConfig.workspaceSeed) {
+      ensureDynamicWorkspaceSeeded({
+        dynamicAgentId: route.targetAgentId,
+        sourceAgentId: route.sourceAgentId,
+        config: cfg,
+      });
     }
-  }
-  if (!matchedAgentId) {
-    matchedAgentId = cfg.defaultAgent || 'main';
+    log?.info?.(
+      `[dingtalk-dynamic-agent] routing source=${route.sourceAgentId} target=${route.targetAgentId} accountId=${accountId} chatType=${sessionContext.chatType} peerId=${sessionContext.peerId}`,
+    );
   }
 
   // 获取 Agent 工作空间路径
@@ -1327,6 +1408,10 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   // ===== 使用 SDK 的 dispatchReplyFromConfig =====
   try {
     const core = getDingtalkRuntime();
+
+    if (route.useDynamicAgent) {
+      await ensureDynamicAgentListed(matchedAgentId, core);
+    }
     
     // 构建消息体（添加图片）
     let finalContent = userContent;
@@ -1334,6 +1419,13 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       const imageMarkdown = imageLocalPaths.map(p => `![image](file://${p})`).join('\n');
       finalContent = finalContent ? `${finalContent}\n\n${imageMarkdown}` : imageMarkdown;
     }
+
+    const commandBody = finalContent;
+    const { modelInputBody } = buildDynamicAgentInboundBody({
+      agentId: matchedAgentId,
+      commandBody,
+      isCommand: commandBody.trim().startsWith('/'),
+    });
 
     // 构建 envelope 格式的消息
     const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);
@@ -1344,11 +1436,12 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
       from: envelopeFrom,
       timestamp: new Date(),
       envelope: envelopeOptions,
-      body: finalContent,
+      body: modelInputBody,
     });
 
-    // matchedAgentId 已在 sessionContext 构建之后通过 bindings 匹配确定，此处直接使用
-    const matchedBy = matchedAgentId !== (cfg.defaultAgent || 'main') ? 'binding' : 'default';
+    const matchedBy = route.useDynamicAgent
+      ? 'dynamic-agent'
+      : (matchedAgentId !== (cfg.defaultAgent || 'main') ? 'binding' : 'default');
     
     // ✅ 使用 SDK 标准方法构建 sessionKey，符合 OpenClaw 规范
     // 格式：agent:{agentId}:{channel}:{peerKind}:{sessionPeerId}
@@ -1377,7 +1470,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
 
     const ctxPayload = core.channel.reply.finalizeInboundContext({
       Body: body,
-      BodyForAgent: finalContent,
+      BodyForAgent: modelInputBody,
       RawBody: userContent,
       CommandBody: userContent,
       From: senderId,
@@ -1582,27 +1675,14 @@ export async function handleDingTalkMessage(params: HandleMessageParams): Promis
     return handleDingTalkMessageInternal(params);
   }
 
-  // 解析 agentId：使用 queueSessionContext.peerId（真实 peer 标识）进行匹配
-  // 与 handleDingTalkMessageInternal 中的匹配逻辑保持一致。
-  // 必须使用 peerId 而非 sessionPeerId，原因：sharedMemoryAcrossConversations=true 时
-  // sessionPeerId 被设为 accountId，导致不同群的消息匹配到同一个 binding。
-  let matchedAgentId: string | null = null;
-  if (cfg.bindings && cfg.bindings.length > 0) {
-    for (const binding of cfg.bindings) {
-      const match = binding.match;
-      if (match.channel && match.channel !== "dingtalk-connector") continue;
-      if (match.accountId && match.accountId !== accountId) continue;
-      if (match.peer) {
-        if (match.peer.kind && match.peer.kind !== queueSessionContext.chatType) continue;
-        if (match.peer.id && match.peer.id !== '*' && match.peer.id !== queueSessionContext.peerId) continue;
-      }
-      matchedAgentId = binding.agentId;
-      break;
-    }
-  }
-  if (!matchedAgentId) {
-    matchedAgentId = cfg.defaultAgent || 'main';
-  }
+  const queueRoute = resolveEffectiveAgentRoute({
+    cfg,
+    accountId,
+    chatType: queueSessionContext.chatType,
+    peerId: queueSessionContext.peerId,
+    senderId,
+  });
+  const matchedAgentId = queueRoute.targetAgentId;
 
   // 构建队列标识：会话 peerId + agentId
   // queueKey 与 sessionKey 使用相同的 peerId，确保隔离策略一致：

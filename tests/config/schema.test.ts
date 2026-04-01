@@ -21,4 +21,18 @@ describe("DingtalkConfigSchema", () => {
   it("requires allowFrom when dmPolicy is allowlist", () => {
     expect(() => DingtalkConfigSchema.parse({ dmPolicy: "allowlist", allowFrom: [] })).toThrow(/allowFrom/);
   });
+
+  it("accepts dynamicAgents config", () => {
+    const out = DingtalkConfigSchema.parse({
+      dynamicAgents: {
+        enabled: true,
+        dmCreateAgent: true,
+        groupEnabled: true,
+        adminUsers: ["admin-1"],
+        workspaceSeed: true,
+      },
+    });
+    expect(out.dynamicAgents?.enabled).toBe(true);
+    expect(out.dynamicAgents?.workspaceSeed).toBe(true);
+  });
 });

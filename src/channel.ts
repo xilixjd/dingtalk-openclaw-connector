@@ -87,6 +87,17 @@ export const dingtalkPlugin: ChannelPlugin<ResolvedDingtalkAccount> = {
         clientSecret: { type: "string" },
         enableMediaUpload: { type: "boolean" },
         systemPrompt: { type: "string" },
+        dynamicAgents: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            enabled: { type: "boolean" },
+            dmCreateAgent: { type: "boolean" },
+            groupEnabled: { type: "boolean" },
+            adminUsers: { type: "array", items: { type: "string" } },
+            workspaceSeed: { type: "boolean" },
+          },
+        },
         dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
         allowFrom: { type: "array", items: { type: "string" } },
         groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
