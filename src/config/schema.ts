@@ -35,6 +35,17 @@ const DingtalkToolsConfigSchema = z
   .strict()
   .optional();
 
+const DynamicAgentsConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    dmCreateAgent: z.boolean().optional(),
+    groupEnabled: z.boolean().optional(),
+    adminUsers: z.array(z.union([z.string(), z.number()])).optional(),
+    workspaceSeed: z.boolean().optional(),
+  })
+  .strict()
+  .optional();
+
 export const DingtalkGroupSchema = z
   .object({
     requireMention: z.boolean().optional(),
@@ -95,6 +106,7 @@ export const DingtalkConfigBaseSchema = z
     clientSecret: buildSecretInputSchema().optional(),
     enableMediaUpload: z.boolean().optional(),
     systemPrompt: z.string().optional(),
+    dynamicAgents: DynamicAgentsConfigSchema,
     ...DingtalkSharedConfigShape,
     dmPolicy: DmPolicySchema.optional().default("open"),
     groupPolicy: GroupPolicySchema.optional().default("open"),
