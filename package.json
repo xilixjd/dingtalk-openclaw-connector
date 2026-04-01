@@ -1,5 +1,5 @@
 {
-  "name": "@dingtalk-real-ai/dingtalk-connector",
+  "name": "@dingtalk-real-ai/dingtalk-connector-fork",
   "version": "0.8.10",
   "description": "DingTalk (钉钉) channel connector — Stream mode with AI Card streaming",
   "main": "index.ts",
