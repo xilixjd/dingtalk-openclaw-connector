@@ -4,6 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { resolveAgentWorkspaceDir } from "./utils/agent.ts";
+
 export type DynamicAgentChatType = "dm" | "group";
 
 export interface DynamicAgentConfig {
@@ -79,34 +81,41 @@ export function shouldUseDynamicAgent(params: {
 const ensuredDynamicAgentIds = new Set<string>();
 let ensureDynamicAgentWriteQueue: Promise<void> = Promise.resolve();
 
-function upsertAgentIdOnlyEntry(cfg: Record<string, unknown>, agentId: string): boolean {
+function upsertDynamicAgentEntry(
+  cfg: Record<string, unknown>,
+  agentId: string,
+  workspaceDir: string,
+): boolean {
   if (!cfg.agents || typeof cfg.agents !== "object") {
     cfg.agents = {};
   }
 
   const agentsObj = cfg.agents as Record<string, unknown>;
-  const currentList: Array<{ id: string }> = Array.isArray(agentsObj.list)
-    ? (agentsObj.list as Array<{ id: string }>)
+  const currentList: Array<{ id?: string; workspace?: string }> = Array.isArray(agentsObj.list)
+    ? (agentsObj.list as Array<{ id?: string; workspace?: string }>)
     : [];
-
-  const existingIds = new Set(
-    currentList
-      .map((entry) => entry?.id?.trim().toLowerCase())
-      .filter((id): id is string => Boolean(id)),
-  );
 
   let changed = false;
   const nextList = [...currentList];
 
   if (nextList.length === 0) {
     nextList.push({ id: "main" });
-    existingIds.add("main");
     changed = true;
   }
 
-  if (!existingIds.has(agentId.toLowerCase())) {
-    nextList.push({ id: agentId });
+  const existingIndex = nextList.findIndex(
+    (entry) => entry?.id?.trim().toLowerCase() === agentId.toLowerCase(),
+  );
+
+  if (existingIndex === -1) {
+    nextList.push({ id: agentId, workspace: workspaceDir });
     changed = true;
+  } else {
+    const existingEntry = nextList[existingIndex];
+    if (!existingEntry.workspace?.trim()) {
+      nextList[existingIndex] = { ...existingEntry, workspace: workspaceDir };
+      changed = true;
+    }
   }
 
   if (changed) {
@@ -132,9 +141,14 @@ export async function ensureDynamicAgentListed(agentId: string, runtime: any): P
       const latestConfig = configRuntime.loadConfig!();
       if (!latestConfig || typeof latestConfig !== "object") return;
 
-      const changed = upsertAgentIdOnlyEntry(
+      const workspaceDir = resolveAgentWorkspaceDir(
+        latestConfig as ClawdbotConfig,
+        normalizedId,
+      );
+      const changed = upsertDynamicAgentEntry(
         latestConfig as Record<string, unknown>,
         normalizedId,
+        workspaceDir,
       );
 
       if (changed) {
@@ -417,7 +431,8 @@ export function ensureDynamicWorkspaceSeeded(params: {
   const { dynamicAgentId, sourceAgentId, config } = params;
 
   const stateDir = resolveStateDir();
-  const targetWorkspace = path.join(stateDir, `workspace-${dynamicAgentId}`);
+  const workspaceConfig = config ?? ({} as ClawdbotConfig);
+  const targetWorkspace = resolveAgentWorkspaceDir(workspaceConfig, dynamicAgentId);
   const seedMarker = path.join(targetWorkspace, ".seeded");
 
   ensureDynamicAgentRuntimeDirs(dynamicAgentId);
@@ -430,26 +445,14 @@ export function ensureDynamicWorkspaceSeeded(params: {
   const candidates: string[] = [];
 
   if (config) {
-    const agentsList = (config as any)?.agents?.list;
-    if (Array.isArray(agentsList)) {
-      for (const agent of agentsList) {
-        if (typeof agent === "object" && agent?.id === sourceAgentId && agent.workspace) {
-          const workspacePath = String(agent.workspace).replace(/^~/, os.homedir());
-          candidates.push(path.resolve(workspacePath));
-          break;
-        }
-      }
-    }
+    candidates.push(path.resolve(resolveAgentWorkspaceDir(config, sourceAgentId)));
   }
 
-  if (candidates.length === 0) {
-    candidates.push(path.join(stateDir, `workspace-${sourceAgentId}`));
-  }
-
+  candidates.push(path.join(stateDir, `workspace-${sourceAgentId}`));
   candidates.push(path.join(stateDir, "workspace"));
 
   let sourceWorkspace: string | undefined;
-  for (const candidate of candidates) {
+  for (const candidate of new Set(candidates.map((item) => path.resolve(item)))) {
     if (fs.existsSync(candidate)) {
       sourceWorkspace = candidate;
       break;

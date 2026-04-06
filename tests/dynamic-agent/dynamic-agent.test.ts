@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDynamicAgentInboundBody,
   ensureDynamicAgentRuntimeDirs,
+  ensureDynamicAgentListed,
   ensureDynamicWorkspaceSeeded,
   generateAgentId,
   resetEnsuredCache,
@@ -125,5 +126,43 @@ describe("dynamic-agent", () => {
       expect(normalResult.modelInputBody).toContain("demo-skill");
       expect(normalResult.modelInputBody).toContain("hello");
     });
+  });
+
+  it("writes an explicit standalone workspace for dynamic agents", async () => {
+    vi.stubEnv("OPENCLAW_STATE_DIR", root);
+
+    const latestConfig = {
+      defaultAgent: "first",
+      agents: {
+        defaults: {
+          workspace: "~/.openclaw/workspace-first",
+        },
+        list: [
+          {
+            id: "first",
+            workspace: "~/.openclaw/workspace-first",
+          },
+        ],
+      },
+    };
+
+    const writeConfigFile = vi.fn(async () => undefined);
+
+    await ensureDynamicAgentListed("dingtalk-acct-a-dm-zhangsan", {
+      config: {
+        loadConfig: () => latestConfig,
+        writeConfigFile,
+      },
+    });
+
+    expect(writeConfigFile).toHaveBeenCalledTimes(1);
+    expect(latestConfig.agents.list).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dingtalk-acct-a-dm-zhangsan",
+          workspace: path.join(root, "workspace-dingtalk-acct-a-dm-zhangsan"),
+        }),
+      ]),
+    );
   });
 });
