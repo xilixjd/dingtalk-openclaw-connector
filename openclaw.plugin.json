@@ -1,7 +1,7 @@
 {
   "id": "dingtalk-connector",
   "name": "DingTalk Channel",
-  "version": "0.8.12",
+  "version": "0.8.13",
   "description": "DingTalk (钉钉) messaging channel via Stream mode with AI Card streaming",
   "author": "DingTalk Real Team",
   "main": "index.ts",
@@ -74,6 +74,37 @@
           },
           "systemPrompt": {
             "type": "string"
+          },
+          "dynamicAgents": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "dmCreateAgent": {
+                "type": "boolean"
+              },
+              "groupEnabled": {
+                "type": "boolean"
+              },
+              "adminUsers": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              },
+              "workspaceSeed": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
           },
           "dmPolicy": {
             "default": "open",
