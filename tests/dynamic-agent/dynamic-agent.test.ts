@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildDynamicAgentInboundBody,
+  ensureDynamicAgentConfigured,
   ensureDynamicAgentRuntimeDirs,
   ensureDynamicAgentListed,
   ensureDynamicWorkspaceSeeded,
@@ -161,6 +162,37 @@ describe("dynamic-agent", () => {
         expect.objectContaining({
           id: "dingtalk-acct-a-dm-zhangsan",
           workspace: path.join(root, "workspace-dingtalk-acct-a-dm-zhangsan"),
+        }),
+      ]),
+    );
+  });
+
+  it("mutates the active config so the current run sees the standalone workspace", () => {
+    vi.stubEnv("OPENCLAW_STATE_DIR", root);
+
+    const cfg = {
+      defaultAgent: "first",
+      agents: {
+        defaults: {
+          workspace: "~/.openclaw/workspace-first",
+        },
+        list: [
+          {
+            id: "first",
+            workspace: "~/.openclaw/workspace-first",
+          },
+        ],
+      },
+    } as any;
+
+    const changed = ensureDynamicAgentConfigured("dingtalk-main-dm-015300235036375480620", cfg);
+
+    expect(changed).toBe(true);
+    expect(cfg.agents.list).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dingtalk-main-dm-015300235036375480620",
+          workspace: path.join(root, "workspace-dingtalk-main-dm-015300235036375480620"),
         }),
       ]),
     );

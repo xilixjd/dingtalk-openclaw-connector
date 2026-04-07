@@ -125,6 +125,23 @@ function upsertDynamicAgentEntry(
   return changed;
 }
 
+export function ensureDynamicAgentConfigured(
+  agentId: string,
+  config: ClawdbotConfig,
+): boolean {
+  const normalizedId = String(agentId).trim().toLowerCase();
+  if (!normalizedId || !config || typeof config !== "object") {
+    return false;
+  }
+
+  const workspaceDir = resolveAgentWorkspaceDir(config, normalizedId);
+  return upsertDynamicAgentEntry(
+    config as unknown as Record<string, unknown>,
+    normalizedId,
+    workspaceDir,
+  );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function ensureDynamicAgentListed(agentId: string, runtime: any): Promise<void> {
   const normalizedId = String(agentId).trim().toLowerCase();

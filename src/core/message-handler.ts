@@ -59,6 +59,7 @@ import { normalizeSlashCommand } from "../utils/session.ts";
 import { getDingtalkRuntime } from "../runtime.ts";
 import {
   buildDynamicAgentInboundBody,
+  ensureDynamicAgentConfigured,
   ensureDynamicAgentListed,
   ensureDynamicAgentRuntimeDirs,
   ensureDynamicWorkspaceSeeded,
@@ -1201,6 +1202,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
   let matchedAgentId: string = route.targetAgentId;
 
   if (route.useDynamicAgent) {
+    ensureDynamicAgentConfigured(route.targetAgentId, cfg);
     ensureDynamicAgentRuntimeDirs(route.targetAgentId);
     if (route.dynamicConfig.workspaceSeed) {
       ensureDynamicWorkspaceSeeded({
