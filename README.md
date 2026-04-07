@@ -314,6 +314,29 @@ openclaw logs --follow
 
 ---
 
+### 配置字段不合法（additional properties）
+
+**症状**：
+
+```
+Problem:
+  - channels.dingtalk-connector: invalid config: must NOT have additional properties
+```
+
+**原因**：配置文件中包含已废弃或已重命名的字段，连接器不再识别。
+
+**解决方案**：打开 `openclaw.config.yaml`，删除 `channels.dingtalk-connector` 下不再支持的字段。已知需要删除的旧字段：
+
+| 旧字段 | 说明 |
+|--------|------|
+| `gatewayPassword` | 早期版本字段，已废弃 |
+| `gatewayToken` | 早期版本字段，已废弃 |
+| `dmHistoryLimit` | v0.8.9 移除（未实现） |
+
+错误信息会指出具体的字段名，删除后重启即可。
+
+---
+
 ### HTTP 401 错误
 
 **症状**：错误信息显示 "401 Unauthorized"

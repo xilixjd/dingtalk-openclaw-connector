@@ -281,6 +281,29 @@ Both session routing/message policy options (including `pmpolicy` and `groupPoli
 
 ---
 
+### Invalid Config: additional properties
+
+**Symptoms**:
+
+```
+Problem:
+  - channels.dingtalk-connector: invalid config: must NOT have additional properties
+```
+
+**Cause**: Your config file contains deprecated or renamed fields that are no longer recognized.
+
+**Solution**: Open `openclaw.config.yaml` and remove any unsupported fields under `channels.dingtalk-connector`. Known fields to remove:
+
+| Old Field | Notes |
+|-----------|-------|
+| `gatewayPassword` | Deprecated legacy field |
+| `gatewayToken` | Deprecated legacy field |
+| `dmHistoryLimit` | Removed in v0.8.9 (never implemented) |
+
+The error message will indicate the exact field name. Remove it and restart.
+
+---
+
 ### HTTP 401 Error
 
 **Symptoms**: Error message shows "401 Unauthorized"
