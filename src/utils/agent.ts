@@ -13,10 +13,6 @@ type AgentConfigEntry = {
   default?: boolean;
 };
 
-function isDynamicDingtalkAgentId(agentId: string): boolean {
-  return /^dingtalk-[a-z0-9_-]+-(dm|group)-[a-z0-9_-]+$/.test(agentId);
-}
-
 function normalizeAgentId(agentId: string): string {
   const normalized = String(agentId ?? "").trim().toLowerCase();
   return normalized || "main";
@@ -85,10 +81,12 @@ function resolveDefaultAgentId(cfg: ClawdbotConfig): string {
  *
  * 参考 OpenClaw Core 的 resolveAgentWorkspaceDir 实现逻辑：
  * 1. 优先从 agents.list 中查找用户配置的 workspace
- * 2. 钉钉 dynamicAgents 始终落到独立的 workspace-<agentId>
- * 3. 默认 Agent 优先使用 agents.defaults.workspace
- * 4. 非默认 Agent 在配置了 agents.defaults.workspace 时，会落到该目录下的子目录
- * 5. 否则回退到 ~/.openclaw/workspace(-{agentId})
+ * 2. 默认 Agent 优先使用 agents.defaults.workspace
+ * 3. 非默认 Agent 在配置了 agents.defaults.workspace 时，会落到该目录下的子目录
+ * 4. 否则回退到 ~/.openclaw/workspace(-{agentId})
+ *
+ * 动态 Agent 的 standalone workspace 由 dynamic-agent 模块显式写入 agents.list，
+ * 这里保持与 OpenClaw Core 一致，不做 channel-specific 特判。
  * 
  * @param cfg - OpenClaw 配置对象
  * @param agentId - Agent ID
@@ -119,10 +117,6 @@ export function resolveAgentWorkspaceDir(
   const configuredWorkspace = resolveConfiguredWorkspace(cfg, normalizedId);
   if (configuredWorkspace) {
     return configuredWorkspace;
-  }
-
-  if (isDynamicDingtalkAgentId(normalizedId)) {
-    return path.join(resolveStateDir(), `workspace-${normalizedId}`);
   }
 
   const defaultAgentId = resolveDefaultAgentId(cfg);

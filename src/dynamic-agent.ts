@@ -134,7 +134,7 @@ export function ensureDynamicAgentConfigured(
     return false;
   }
 
-  const workspaceDir = resolveAgentWorkspaceDir(config, normalizedId);
+  const workspaceDir = resolveDynamicAgentWorkspaceDir(normalizedId);
   return upsertDynamicAgentEntry(
     config as unknown as Record<string, unknown>,
     normalizedId,
@@ -158,10 +158,7 @@ export async function ensureDynamicAgentListed(agentId: string, runtime: any): P
       const latestConfig = configRuntime.loadConfig!();
       if (!latestConfig || typeof latestConfig !== "object") return;
 
-      const workspaceDir = resolveAgentWorkspaceDir(
-        latestConfig as ClawdbotConfig,
-        normalizedId,
-      );
+      const workspaceDir = resolveDynamicAgentWorkspaceDir(normalizedId);
       const changed = upsertDynamicAgentEntry(
         latestConfig as Record<string, unknown>,
         normalizedId,
@@ -214,6 +211,11 @@ function resolveStateDir(): string {
     return stateOverride;
   }
   return path.join(os.homedir(), ".openclaw");
+}
+
+function resolveDynamicAgentWorkspaceDir(agentId: string): string {
+  const normalizedId = String(agentId).trim().toLowerCase() || "main";
+  return path.join(resolveStateDir(), `workspace-${normalizedId}`);
 }
 
 function recordDynamicSkillDelta(
@@ -448,8 +450,7 @@ export function ensureDynamicWorkspaceSeeded(params: {
   const { dynamicAgentId, sourceAgentId, config } = params;
 
   const stateDir = resolveStateDir();
-  const workspaceConfig = config ?? ({} as ClawdbotConfig);
-  const targetWorkspace = resolveAgentWorkspaceDir(workspaceConfig, dynamicAgentId);
+  const targetWorkspace = resolveDynamicAgentWorkspaceDir(dynamicAgentId);
   const seedMarker = path.join(targetWorkspace, ".seeded");
 
   ensureDynamicAgentRuntimeDirs(dynamicAgentId);

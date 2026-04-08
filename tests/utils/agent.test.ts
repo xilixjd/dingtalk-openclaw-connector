@@ -9,7 +9,7 @@ describe("agent workspace resolution", () => {
     vi.unstubAllEnvs();
   });
 
-  it("keeps dynamic agents out of agents.defaults.workspace", () => {
+  it("prefers explicit dynamic-agent workspace overrides and keeps core fallback for others", () => {
     vi.stubEnv("HOME", "/fake-home");
     vi.stubEnv("OPENCLAW_STATE_DIR", "/tmp/openclaw-state");
 
@@ -23,6 +23,10 @@ describe("agent workspace resolution", () => {
           {
             id: "first",
             workspace: "~/.openclaw/workspace-first",
+          },
+          {
+            id: "dingtalk-acct-a-dm-zhangsan",
+            workspace: "/tmp/openclaw-state/workspace-dingtalk-acct-a-dm-zhangsan",
           },
         ],
       },
