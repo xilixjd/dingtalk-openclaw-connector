@@ -35,4 +35,18 @@ describe("DingtalkConfigSchema", () => {
     expect(out.dynamicAgents?.enabled).toBe(true);
     expect(out.dynamicAgents?.workspaceSeed).toBe(true);
   });
+
+  it("accepts enableMediaUpload in per-account config", () => {
+    const out = DingtalkConfigSchema.parse({
+      accounts: { work: { enableMediaUpload: true } },
+    });
+    expect((out.accounts?.work as any)?.enableMediaUpload).toBe(true);
+  });
+
+  it("accepts systemPrompt in per-account config", () => {
+    const out = DingtalkConfigSchema.parse({
+      accounts: { work: { systemPrompt: "你是一个助手" } },
+    });
+    expect((out.accounts?.work as any)?.systemPrompt).toBe("你是一个助手");
+  });
 });

@@ -77,6 +77,8 @@ const DingtalkSharedConfigShape = {
   ackText: z.string().optional(),
   endpoint: z.string().optional(), // DWClient gateway endpoint
   debug: z.boolean().optional(), // DWClient debug mode
+  enableMediaUpload: z.boolean().optional(),
+  systemPrompt: z.string().optional(),
 };
 
 /**
@@ -104,8 +106,6 @@ export const DingtalkConfigBaseSchema = z
     // Top-level credentials (backward compatible for single-account mode)
     clientId: z.union([z.string(), z.number()]).optional(),
     clientSecret: buildSecretInputSchema().optional(),
-    enableMediaUpload: z.boolean().optional(),
-    systemPrompt: z.string().optional(),
     dynamicAgents: DynamicAgentsConfigSchema,
     ...DingtalkSharedConfigShape,
     dmPolicy: DmPolicySchema.optional().default("open"),
