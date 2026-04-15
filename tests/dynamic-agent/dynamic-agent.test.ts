@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -105,10 +105,13 @@ describe("dynamic-agent", () => {
       sourceAgentId: "main",
     });
 
+    const stagingSkillDir = path.join(root, "staging-added-skill");
+    await mkdir(stagingSkillDir, { recursive: true });
     await writeFile(
-      path.join(root, "workspace-dyn-watch-user", "skills", "demo-skill", "SKILL.md"),
-      "demo-skill-v2",
+      path.join(stagingSkillDir, "SKILL.md"),
+      ["---", "name: added-skill", "description: Added skill description", "---", "", "body"].join("\n"),
     );
+    await rename(stagingSkillDir, path.join(root, "workspace-dyn-watch-user", "skills", "added-skill"));
 
     const commandResult = buildDynamicAgentInboundBody({
       agentId: "dyn-watch-user",
@@ -124,7 +127,8 @@ describe("dynamic-agent", () => {
         isCommand: false,
       });
       expect(normalResult.modelInputBody).toContain("[Runtime note: workspace skills changed]");
-      expect(normalResult.modelInputBody).toContain("demo-skill");
+      expect(normalResult.modelInputBody).toContain("added: added-skill");
+      expect(normalResult.modelInputBody).toContain("description: Added skill description");
       expect(normalResult.modelInputBody).toContain("hello");
     });
   });
