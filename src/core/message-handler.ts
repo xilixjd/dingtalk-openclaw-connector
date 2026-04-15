@@ -1459,11 +1459,19 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     }
 
     const commandBody = finalContent;
+    const isCommand = commandBody.trim().startsWith('/');
     const { modelInputBody } = buildDynamicAgentInboundBody({
       agentId: matchedAgentId,
       commandBody,
-      isCommand: commandBody.trim().startsWith('/'),
+      isCommand,
     });
+    if (
+      !isCommand &&
+      modelInputBody !== commandBody &&
+      modelInputBody.includes("[Runtime note: workspace skills changed]")
+    ) {
+      log?.info?.(`[dingtalk-dynamic-skills] runtime note injected for agent=${matchedAgentId}, messageId=${data.msgId}`);
+    }
 
     // 构建 envelope 格式的消息
     const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);
@@ -1509,6 +1517,7 @@ export async function handleDingTalkMessageInternal(params: HandleMessageParams)
     const ctxPayload = core.channel.reply.finalizeInboundContext({
       Body: body,
       BodyForAgent: modelInputBody,
+      BodyForCommands: commandBody,
       RawBody: userContent,
       CommandBody: userContent,
       From: senderId,

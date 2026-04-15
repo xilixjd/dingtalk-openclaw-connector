@@ -133,6 +133,28 @@ describe("dynamic-agent", () => {
     });
   });
 
+  it("does not emit added notes for pre-existing skills after startup", async () => {
+    vi.stubEnv("OPENCLAW_STATE_DIR", root);
+
+    const sourceWorkspace = path.join(root, "workspace-main");
+    const sourceSkillDir = path.join(sourceWorkspace, "skills", "existing-skill");
+    await mkdir(sourceSkillDir, { recursive: true });
+    await writeFile(path.join(sourceWorkspace, "AGENTS.md"), "source-agents");
+    await writeFile(path.join(sourceSkillDir, "SKILL.md"), "existing-skill-v1");
+
+    ensureDynamicWorkspaceSeeded({
+      dynamicAgentId: "dyn-existing-user",
+      sourceAgentId: "main",
+    });
+
+    const normalResult = buildDynamicAgentInboundBody({
+      agentId: "dyn-existing-user",
+      commandBody: "hello",
+      isCommand: false,
+    });
+    expect(normalResult.modelInputBody).toBe("hello");
+  });
+
   it("writes an explicit standalone workspace for dynamic agents", async () => {
     vi.stubEnv("OPENCLAW_STATE_DIR", root);
 
